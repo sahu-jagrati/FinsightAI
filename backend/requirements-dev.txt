@@ -1,0 +1,15 @@
+-r requirements.txt
+
+pytest==8.3.4
+pytest-asyncio==0.25.0
+pytest-cov==6.0.0
+httpx==0.28.1
+aiosqlite==0.20.0
+ruff==0.8.4
+mypy==1.14.0
+
+# test fixture generation only (build a real PDF to parse in tests)
+fpdf2==2.8.2
+
+# HTTP mocking for LLM provider tests (no real API keys/network needed)
+respx==0.22.0

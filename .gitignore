@@ -1,0 +1,23 @@
+# Root-level ignores. frontend/ and backend/ have their own more specific
+# .gitignore files; this covers env files, editor cruft, and anything at
+# the repo root.
+
+.env
+.env.local
+!.env.example
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Python (backend — see backend/.gitignore for the full list)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Data (uploaded documents, downloaded models) — never committed
+/data/
+*.log

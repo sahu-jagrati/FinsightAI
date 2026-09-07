@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* FinSight AI commits to a single dark, data-dense "financial terminal"
+   aesthetic (Section 21 design inspiration) rather than following the
+   system theme — consistency matters more than light-mode support for a
+   dashboard meant to be lived in for long research sessions. */
+:root {
+  --background: #05070d;
+  --surface: #0b0f19;
+  --surface-raised: #111827;
+  --border: #1f2937;
+  --foreground: #e5e7eb;
+  --muted: #8b94a7;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+::selection {
+  background: rgba(99, 102, 241, 0.35);
+}
+
+/* Thin, unobtrusive scrollbars fit the terminal aesthetic better than the
+   platform default, especially inside scrollable tables/panels. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3142 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: #2a3142;
+  border-radius: 9999px;
+}

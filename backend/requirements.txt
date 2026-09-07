@@ -1,0 +1,41 @@
+# ---- Phase 1: core web/data stack -----------------------------------------
+# AI/RAG dependencies (LangChain, HF transformers, rerankers, etc.) are added
+# in later phases (see docs/PHASES.md) to keep each phase's diff reviewable.
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+psycopg[binary]==3.2.3
+alembic==1.14.0
+pgvector==0.3.6
+
+# Cache / queue
+redis==5.2.1
+
+# HTTP / async utilities
+httpx==0.28.1
+python-multipart==0.0.20
+python-dotenv==1.0.1
+tenacity==9.0.0
+
+# Logging
+structlog==24.4.0
+
+# ---- Phase 2: document ingestion ------------------------------------------
+pypdf==5.1.0
+beautifulsoup4==4.12.3
+
+# ---- Phase 3: embeddings + pgvector ----------------------------------------
+# CPU-only sentence-transformers stack. The extra index gives a ~200MB
+# CPU-only torch wheel instead of PyPI's default multi-GB CUDA build — this
+# app never needs a GPU. First run also downloads the embedding model
+# (~130MB for the default BAAI/bge-small-en-v1.5) from Hugging Face Hub and
+# caches it in the container/volume — see EMBEDDING_MODEL_NAME in .env.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.5.1
+sentence-transformers==3.3.1
