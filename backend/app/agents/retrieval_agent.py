@@ -16,6 +16,7 @@ concurrency here means real separate connections, not just separate
 """
 
 import asyncio
+import math
 import uuid
 from dataclasses import asdict
 
@@ -91,6 +92,23 @@ def _dedupe_keep_best(results: list[ScoredChunk]) -> list[ScoredChunk]:
     return list(best.values())
 
 
+def _normalized_score(r: ScoredChunk) -> float:
+    """`EvidenceItem.score` feeds directly into the Report Agent's
+    confidence (Section 16), so it needs to actually mean "how relevant,
+    on a 0-1 scale" — not just be whatever the last stage of the pipeline
+    happened to output. `final_score` (hybrid fusion) is already a clean
+    [0,1] value, but a real cross-encoder's `rerank_score` is an *unbounded
+    logit* — often negative for a merely-plausible match, not a bad one —
+    so using it as-is silently collapsed legitimate evidence's confidence
+    to 0.0 (found testing a real "what are the risks" query, where nothing
+    is an obvious keyword match the way a dollar figure is). A sigmoid is
+    the standard way to read a cross-encoder logit as a pseudo-probability.
+    """
+    if r.rerank_score is None:
+        return r.final_score
+    return 1.0 / (1.0 + math.exp(-r.rerank_score))
+
+
 async def _search_with_own_session(
     state: ResearchState, filters: RetrievalFilters
 ) -> list[ScoredChunk]:
@@ -130,9 +148,29 @@ async def run_retrieval_agent(state: ResearchState) -> None:
         result_groups = await asyncio.gather(
             *[_search_with_own_session(state, filters) for _, filters in filter_sets]
         )
-        pooled = _dedupe_keep_best([r for group in result_groups for r in group])
+        pooled = [r for group in result_groups for r in group]
 
-        reranked = await state.reranker.rerank(state.query, pooled, top_n=settings.RERANK_TOP_N)
+        if len(filter_sets) > 1:
+            # Multi-company (comparison) query: rerank EACH company's own
+            # candidate pool independently rather than reranking everything
+            # pooled together with one flat top_n cutoff. Verified as a
+            # real bug against live data — a cross-encoder score is just
+            # "how well does this text answer the query", which has no
+            # notion of "and don't let one company's chunks crowd out the
+            # other's": whichever company's retrieved text happened to
+            # read as more relevant took every slot, leaving the other
+            # company with zero evidence and nothing to compare against.
+            per_company_budget = max(1, settings.RERANK_TOP_N // len(filter_sets))
+            reranked_groups = await asyncio.gather(
+                *[
+                    state.reranker.rerank(state.query, _dedupe_keep_best(group), top_n=per_company_budget)
+                    for group in result_groups
+                ]
+            )
+            reranked = [item for group in reranked_groups for item in group]
+        else:
+            deduped = _dedupe_keep_best(pooled)
+            reranked = await state.reranker.rerank(state.query, deduped, top_n=settings.RERANK_TOP_N)
 
         company_ids = {r.chunk.company_id for r in reranked if r.chunk.company_id}
         id_to_name = {}
@@ -148,7 +186,7 @@ async def run_retrieval_agent(state: ResearchState) -> None:
                 document_filename=(r.chunk.chunk_metadata or {}).get("filename"),
                 page_number=r.chunk.page_number,
                 section=r.chunk.section,
-                score=r.rerank_score if r.rerank_score is not None else r.final_score,
+                score=_normalized_score(r),
                 document_id=r.chunk.document_id,
                 company_id=r.chunk.company_id,
             )

@@ -1,10 +1,14 @@
 """Persists a completed `ResearchState` as an `Analysis` + its `AgentRun`
-trace (Section 20/25), and reads them back for `GET /api/analyses*`.
+trace (Section 20/25), and reads them back for `GET /api/analyses*`
+(Research History / "Recent Research" — loading a past analysis never
+re-runs the agent pipeline, it just deserializes the already-persisted
+`result`).
 """
 
+import re
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,6 +16,23 @@ from app.agents.state import Citation, ComparisonRow, ReportResult, ResearchStat
 from app.core.exceptions import NotFoundError
 from app.models.analysis import AgentRun, AgentRunStatus, Analysis, AnalysisStatus
 from app.services.calculations import CalculationResult
+
+_TITLE_MAX_LEN = 200
+_TITLE_TRUNCATE_AT = 80
+
+
+def generate_title(query: str) -> str:
+    """Derives a short, human-scannable title from the raw query — no LLM
+    call, so this never adds latency or cost to persisting an analysis.
+    Collapses whitespace and truncates on a word boundary."""
+    collapsed = re.sub(r"\s+", " ", query).strip()
+    if len(collapsed) <= _TITLE_TRUNCATE_AT:
+        return collapsed[:_TITLE_MAX_LEN] or "Untitled research"
+    truncated = collapsed[:_TITLE_TRUNCATE_AT]
+    last_space = truncated.rfind(" ")
+    if last_space > 0:
+        truncated = truncated[:last_space]
+    return truncated.rstrip(",.;:") + "…"
 
 
 def _serialize_calculation(c: CalculationResult) -> dict:
@@ -29,6 +50,8 @@ def _serialize_row(row: ComparisonRow) -> dict:
         "metric": row.metric,
         "values_by_year": {str(y): v for y, v in row.values_by_year.items()},
         "calculation": _serialize_calculation(row.calculation) if row.calculation else None,
+        "unit": row.unit,
+        "insufficient_reason": row.insufficient_reason,
     }
 
 
@@ -64,6 +87,7 @@ async def persist_analysis(
     analysis = Analysis(
         user_id=user_id,
         query=state.query,
+        title=generate_title(state.query),
         status=status,
         result=serialize_report(state.report) if state.report else None,
         error=supervisor_trace.error if supervisor_trace else None,
@@ -111,14 +135,25 @@ async def get_analysis(db: AsyncSession, analysis_id: uuid.UUID) -> Analysis:
 
 
 async def list_analyses(
-    db: AsyncSession, *, limit: int = 20, offset: int = 0
+    db: AsyncSession, *, limit: int = 20, offset: int = 0, search: str | None = None
 ) -> tuple[list[Analysis], int]:
-    total = (await db.execute(select(func.count()).select_from(Analysis))).scalar_one()
-    result = await db.execute(
-        select(Analysis)
-        .options(selectinload(Analysis.agent_runs))
-        .order_by(Analysis.created_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
+    filters = []
+    if search and search.strip():
+        pattern = f"%{search.strip()}%"
+        filters.append(or_(Analysis.title.ilike(pattern), Analysis.query.ilike(pattern)))
+
+    count_stmt = select(func.count()).select_from(Analysis)
+    stmt = select(Analysis).options(selectinload(Analysis.agent_runs))
+    for f in filters:
+        count_stmt = count_stmt.where(f)
+        stmt = stmt.where(f)
+
+    total = (await db.execute(count_stmt)).scalar_one()
+    result = await db.execute(stmt.order_by(Analysis.created_at.desc()).limit(limit).offset(offset))
     return list(result.scalars().all()), total
+
+
+async def delete_analysis(db: AsyncSession, analysis_id: uuid.UUID) -> None:
+    analysis = await get_analysis(db, analysis_id)
+    await db.delete(analysis)
+    await db.flush()

@@ -26,8 +26,16 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Sanitized name of the stored file on disk (may differ from upload name)."""
     original_filename: Mapped[str] = mapped_column(String(512))
 
+    # values_callable: without it, SQLAlchemy's Enum type binds/reads the
+    # Python member *name* ("ANNUAL_REPORT"), not its *value*
+    # ("annual_report") — but the Postgres type was created by the Alembic
+    # migration with the lowercase values. The mismatch is invisible in
+    # tests that build the schema via `Base.metadata.create_all()` (which
+    # would create the enum type using names too, so it's self-consistent)
+    # and only breaks against a real, migration-created database.
     document_type: Mapped[DocumentType] = mapped_column(
-        SAEnum(DocumentType, name="document_type"), default=DocumentType.OTHER
+        SAEnum(DocumentType, name="document_type", values_callable=lambda e: [m.value for m in e]),
+        default=DocumentType.OTHER,
     )
     reporting_period: Mapped[str | None] = mapped_column(String(64))
     """Free-form period label, e.g. "2025" or "Q4 2025"."""
@@ -36,7 +44,9 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     """Where the document came from (URL, "user upload", etc.)."""
 
     status: Mapped[DocumentStatus] = mapped_column(
-        SAEnum(DocumentStatus, name="document_status"),
+        SAEnum(
+            DocumentStatus, name="document_status", values_callable=lambda e: [m.value for m in e]
+        ),
         default=DocumentStatus.UPLOADED,
         index=True,
     )

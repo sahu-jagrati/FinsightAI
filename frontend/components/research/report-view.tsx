@@ -11,7 +11,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { formatPercent, titleCase } from "@/lib/utils";
+import { formatPercent } from "@/lib/utils";
+import {
+  INSUFFICIENT_DATA,
+  buildCalculationCards,
+  buildChartData,
+  buildDisplayRows,
+} from "@/lib/report-data";
 import type { Citation, ReportResult } from "@/types/api";
 import { Badge } from "@/components/ui/badge";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@/components/ui/table";
@@ -27,11 +33,11 @@ export function ReportView({ report }: { report: ReportResult }) {
     );
   }
 
-  const calcRows = report.comparison_table.filter((r) => r.calculation);
-  const chartData = calcRows.map((r) => ({
-    name: `${r.company} · ${titleCase(r.metric)}`,
-    value: r.calculation!.result,
-  }));
+  // One source of truth: the chart, the table and the calculation cards are
+  // all views over the same validated rows (see lib/report-data.ts).
+  const rows = buildDisplayRows(report);
+  const chartData = buildChartData(rows);
+  const cards = buildCalculationCards(rows);
 
   return (
     <div className="space-y-5">
@@ -64,13 +70,9 @@ export function ReportView({ report }: { report: ReportResult }) {
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                 <XAxis dataKey="name" stroke="#8b94a7" fontSize={11} />
-                <YAxis
-                  stroke="#8b94a7"
-                  fontSize={11}
-                  tickFormatter={(v) => formatPercent(v, 0)}
-                />
+                <YAxis stroke="#8b94a7" fontSize={11} tickFormatter={(v) => `${v}%`} />
                 <Tooltip
-                  formatter={(v) => formatPercent(Number(v))}
+                  formatter={(v) => `${Number(v).toFixed(1)}%`}
                   contentStyle={{
                     background: "#111827",
                     border: "1px solid #1f2937",
@@ -85,7 +87,7 @@ export function ReportView({ report }: { report: ReportResult }) {
         </div>
       )}
 
-      {report.comparison_table.length > 0 && (
+      {rows.length > 0 && (
         <div>
           <SectionLabel>Financial comparison</SectionLabel>
           <Table>
@@ -93,24 +95,30 @@ export function ReportView({ report }: { report: ReportResult }) {
               <Tr>
                 <Th>Company</Th>
                 <Th>Metric</Th>
+                <Th>Unit</Th>
                 <Th>Values by year</Th>
                 <Th>Result</Th>
               </Tr>
             </Thead>
             <Tbody>
-              {report.comparison_table.map((row, i) => (
-                <Tr key={i}>
+              {rows.map((row) => (
+                <Tr key={row.key}>
                   <Td className="font-medium">{row.company}</Td>
-                  <Td className="text-muted">{titleCase(row.metric)}</Td>
+                  <Td className="text-muted">{row.metricLabel}</Td>
+                  <Td className="text-muted">{row.unitLabel}</Td>
                   <Td className="text-muted">
-                    {Object.entries(row.values_by_year)
-                      .map(([y, v]) => `${y}: ${v.toLocaleString()}`)
-                      .join("  ·  ")}
+                    {row.years.length > 0
+                      ? row.years.map((y) => `${y.year}: ${y.value}`).join("  ·  ")
+                      : "—"}
                   </Td>
                   <Td>
                     {row.calculation ? (
                       <span className="font-medium text-emerald-400">
-                        {formatPercent(row.calculation.result)}
+                        {cards.find((c) => c.key === row.key)?.value}
+                      </span>
+                    ) : row.insufficient ? (
+                      <span className="text-amber-400" title={row.insufficientReason ?? undefined}>
+                        {INSUFFICIENT_DATA}
                       </span>
                     ) : (
                       "—"
@@ -123,22 +131,23 @@ export function ReportView({ report }: { report: ReportResult }) {
         </div>
       )}
 
-      {report.calculations.length > 0 && (
+      {cards.length > 0 && (
         <div>
           <SectionLabel>Calculations</SectionLabel>
           <div className="space-y-2">
-            {report.calculations.map((c, i) => (
+            {cards.map((c) => (
               <div
-                key={i}
+                key={c.key}
                 className="flex items-center justify-between rounded-md bg-white/[0.03] px-3 py-2 text-xs"
               >
                 <div>
-                  <div className="font-medium text-foreground">{titleCase(c.operation)}</div>
+                  <div className="font-medium text-foreground">
+                    {c.title}
+                    {c.period && <span className="ml-1.5 text-muted">({c.period})</span>}
+                  </div>
                   <div className="font-mono text-[11px] text-muted">{c.formula}</div>
                 </div>
-                <div className="font-mono text-sm font-semibold text-indigo-300">
-                  {formatPercent(c.result)}
-                </div>
+                <div className="font-mono text-sm font-semibold text-indigo-300">{c.value}</div>
               </div>
             ))}
           </div>

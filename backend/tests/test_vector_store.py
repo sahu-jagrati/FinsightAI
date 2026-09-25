@@ -101,3 +101,79 @@ async def test_dense_search_respects_company_filter(pg_session):
 
     assert len(results) == 1
     assert results[0].chunk.company_id == apple.id
+
+
+async def test_year_filter_does_not_exclude_chunks_with_no_year_set(pg_session):
+    """Regression test for a real bug found against a live-uploaded Apple
+    10-K PDF: it was ingested with no `reporting_period`, so every one of
+    its chunks got `year=None` (see `metadata_extractor.extract_year`).
+    Asking "What was Apple's revenue in fiscal 2025?" extracts
+    `years=[2025]` and used to hard-filter with `year == 2025`, which
+    matched zero rows even though the document plainly discussed 2025 —
+    the retrieval agent reported "completed" with empty evidence, and the
+    Report Agent then correctly (but unhelpfully) refused to answer.
+    `year`, when a chunk doesn't have it, must never be treated as
+    disqualifying — a 10-K's own comparative tables routinely report
+    several fiscal years' figures in a single chunk anyway, so a document-
+    level "year" is only ever a hint, not a hard partition."""
+    company, document = await _make_document(pg_session, company_name="Apple")
+
+    text = "Apple's total net sales were $416,161 million in fiscal 2025."
+    chunk = Chunk(chunk_index=0, content=text, page_number=25, section=None, token_count=8)
+    embedding = await embedder.embed_documents([text])
+    await insert_chunks(
+        pg_session,
+        document_id=document.id,
+        company_id=company.id,
+        document_type=document.document_type.value,
+        year=None,  # no reporting_period was supplied at upload
+        source="test",
+        filename="apple_10k.pdf",
+        chunks=[chunk],
+        embeddings=embedding,
+    )
+    await pg_session.commit()
+
+    query_embedding = await embedder.embed_query("Apple total net sales fiscal 2025")
+    results = await dense_search(
+        pg_session,
+        query_embedding,
+        top_k=5,
+        filters=RetrievalFilters(company_id=company.id, years=[2025, 2024]),
+    )
+
+    assert len(results) == 1
+    assert results[0].chunk.year is None
+
+
+async def test_year_filter_still_excludes_a_definitively_mismatched_year(pg_session):
+    """The permissive-NULL fix above must not turn `year` filtering into a
+    no-op: a chunk that DOES carry an explicit, mismatched year should
+    still be filtered out."""
+    company, document = await _make_document(pg_session, company_name="Apple")
+
+    text = "Apple's total net sales were $274,515 million in fiscal 2020."
+    chunk = Chunk(chunk_index=0, content=text, page_number=1, section=None, token_count=8)
+    embedding = await embedder.embed_documents([text])
+    await insert_chunks(
+        pg_session,
+        document_id=document.id,
+        company_id=company.id,
+        document_type=document.document_type.value,
+        year=2020,
+        source="test",
+        filename="apple_10k_2020.pdf",
+        chunks=[chunk],
+        embeddings=embedding,
+    )
+    await pg_session.commit()
+
+    query_embedding = await embedder.embed_query("Apple total net sales fiscal 2020")
+    results = await dense_search(
+        pg_session,
+        query_embedding,
+        top_k=5,
+        filters=RetrievalFilters(company_id=company.id, years=[2025]),
+    )
+
+    assert results == []

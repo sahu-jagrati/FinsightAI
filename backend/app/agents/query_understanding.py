@@ -32,7 +32,25 @@ _QUERY_METRIC_KEYWORDS: dict[str, list[str]] = {
 
 _OPERATION_KEYWORDS: dict[str, list[str]] = {
     "cagr": ["cagr", "compound annual growth"],
-    "growth": ["growth", "grew", "increase", "yoy", "year over year", "year-over-year"],
+    "growth": [
+        "growth",
+        "grew",
+        "increase",
+        "yoy",
+        "year over year",
+        "year-over-year",
+        # "Calculate the percentage change ..." is a very common way to
+        # phrase a growth request without using the word "growth" at all —
+        # found live: this exact phrasing on a real Apple 10-K query left
+        # `operations` as just `["summary"]` (matched by "reasons"),
+        # `wants_calculation` false, and the Calculation Agent silently
+        # skipped even though retrieval/extraction had everything needed.
+        "percentage change",
+        "percent change",
+        "% change",
+        "pct change",
+        "rate of change",
+    ],
     "margin": ["margin"],
     "comparison": ["compare", "comparison", "versus", " vs ", " vs. "],
     "summary": ["summarize", "summary", "overview", "what caused", "why did", "reasons"],

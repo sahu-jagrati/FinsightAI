@@ -1,0 +1,109 @@
+{
+ "executive_summary": "Apple's EPS was $7.46 in 2025, up from $6.08 in 2024 — a change of +$1.38 (+22.7%).",
+ "key_findings": [
+  "2025 Apple EPS: $7.46",
+  "2024 Apple EPS: $6.08",
+  "Dollar change (2024→2025): +$1.38",
+  "Percentage change (2024→2025): +22.7%"
+ ],
+ "comparison_table": [
+  {
+   "company": "Apple",
+   "metric": "eps",
+   "values_by_year": {
+    "2025": 7.46,
+    "2024": 6.08
+   },
+   "calculation": {
+    "operation": "percentage_change",
+    "result": 0.2269736842105263,
+    "formula": "(New Value - Old Value) / |Old Value|",
+    "inputs": {
+     "old_value": 6.08,
+     "new_value": 7.46,
+     "begin_year": 2024,
+     "end_year": 2025,
+     "unit": "usd_per_share"
+    }
+   },
+   "unit": "usd_per_share",
+   "insufficient_reason": null
+  },
+  {
+   "company": "Apple",
+   "metric": "total_assets",
+   "values_by_year": {},
+   "calculation": null,
+   "unit": "usd",
+   "insufficient_reason": "Insufficient data: no validated total assets found in the retrieved evidence"
+  },
+  {
+   "company": "Apple",
+   "metric": "total_liabilities",
+   "values_by_year": {},
+   "calculation": null,
+   "unit": "usd",
+   "insufficient_reason": "Insufficient data: no validated total liabilities found in the retrieved evidence"
+  }
+ ],
+ "calculations": [
+  {
+   "operation": "percentage_change",
+   "result": 0.2269736842105263,
+   "formula": "(New Value - Old Value) / |Old Value|",
+   "inputs": {
+    "old_value": 6.08,
+    "new_value": 7.46,
+    "begin_year": 2024,
+    "end_year": 2025,
+    "unit": "usd_per_share"
+   }
+  }
+ ],
+ "sources": [
+  "Apple — Apple_10-K-2025-As-Filed.pdf, p. 39",
+  "Apple — Apple_10-K-2025-As-Filed.pdf, p. 27",
+  "Apple — Apple_10-K-2025-As-Filed.pdf, p. 22",
+  "Apple — Apple_10-K-2025-As-Filed.pdf, p. 46",
+  "Apple — Apple_10-K-2025-As-Filed.pdf, p. 44"
+ ],
+ "citations": [
+  {
+   "label": "Apple — Apple_10-K-2025-As-Filed.pdf, p. 39",
+   "company": "Apple",
+   "document_id": "470d43fe-c6e0-4b8c-beb6-65a0b4a4606d",
+   "document_filename": "Apple_10-K-2025-As-Filed.pdf",
+   "page_number": 39
+  },
+  {
+   "label": "Apple — Apple_10-K-2025-As-Filed.pdf, p. 27",
+   "company": "Apple",
+   "document_id": "470d43fe-c6e0-4b8c-beb6-65a0b4a4606d",
+   "document_filename": "Apple_10-K-2025-As-Filed.pdf",
+   "page_number": 27
+  },
+  {
+   "label": "Apple — Apple_10-K-2025-As-Filed.pdf, p. 22",
+   "company": "Apple",
+   "document_id": "470d43fe-c6e0-4b8c-beb6-65a0b4a4606d",
+   "document_filename": "Apple_10-K-2025-As-Filed.pdf",
+   "page_number": 22
+  },
+  {
+   "label": "Apple — Apple_10-K-2025-As-Filed.pdf, p. 46",
+   "company": "Apple",
+   "document_id": "470d43fe-c6e0-4b8c-beb6-65a0b4a4606d",
+   "document_filename": "Apple_10-K-2025-As-Filed.pdf",
+   "page_number": 46
+  },
+  {
+   "label": "Apple — Apple_10-K-2025-As-Filed.pdf, p. 44",
+   "company": "Apple",
+   "document_id": "470d43fe-c6e0-4b8c-beb6-65a0b4a4606d",
+   "document_filename": "Apple_10-K-2025-As-Filed.pdf",
+   "page_number": 44
+  }
+ ],
+ "confidence": 0.694,
+ "insufficient_evidence": false
+}

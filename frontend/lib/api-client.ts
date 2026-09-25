@@ -145,16 +145,22 @@ export function analyze(query: string): Promise<Analysis> {
 export function listAnalyses(params?: {
   limit?: number;
   offset?: number;
+  search?: string;
 }): Promise<AnalysisListResponse> {
   const qs = new URLSearchParams();
   if (params?.limit) qs.set("limit", String(params.limit));
   if (params?.offset) qs.set("offset", String(params.offset));
+  if (params?.search) qs.set("search", params.search);
   const suffix = qs.toString() ? `?${qs}` : "";
   return request(`/api/analyses${suffix}`);
 }
 
 export function getAnalysis(id: string): Promise<Analysis> {
   return request(`/api/analyses/${id}`);
+}
+
+export function deleteAnalysis(id: string): Promise<void> {
+  return request(`/api/analyses/${id}`, { method: "DELETE" });
 }
 
 /**

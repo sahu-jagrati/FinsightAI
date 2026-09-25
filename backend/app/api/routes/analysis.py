@@ -9,14 +9,20 @@ Events, for the live agent execution panel (Section 21/25).
 import json
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.supervisor import run_research, stream_research
 from app.db.session import get_db, get_session_factory
-from app.schemas.analysis import AnalysisListResponse, AnalysisRead, AnalyzeRequest
-from app.services.analysis_service import get_analysis, list_analyses, persist_analysis, serialize_report
+from app.schemas.analysis import AnalysisListResponse, AnalysisRead, AnalysisSummary, AnalyzeRequest
+from app.services.analysis_service import (
+    delete_analysis,
+    get_analysis,
+    list_analyses,
+    persist_analysis,
+    serialize_report,
+)
 
 router = APIRouter(tags=["research"])
 
@@ -65,12 +71,15 @@ async def query(
 
 @router.get("/analyses", response_model=AnalysisListResponse)
 async def get_analyses(
-    limit: int = 20, offset: int = 0, db: AsyncSession = Depends(get_db)
+    limit: int = 20, offset: int = 0, search: str | None = None, db: AsyncSession = Depends(get_db)
 ) -> AnalysisListResponse:
+    """Recent Research list (Section: Research History). Returns the
+    lightweight `AnalysisSummary` shape — open `GET /analyses/{id}` for
+    the full persisted report, which never re-runs the agent pipeline."""
     limit = max(1, min(limit, 100))
-    items, total = await list_analyses(db, limit=limit, offset=offset)
+    items, total = await list_analyses(db, limit=limit, offset=offset, search=search)
     return AnalysisListResponse(
-        items=[AnalysisRead.model_validate(a) for a in items],
+        items=[AnalysisSummary.from_analysis(a) for a in items],
         total=total,
         limit=limit,
         offset=offset,
@@ -81,5 +90,15 @@ async def get_analyses(
 async def get_analysis_by_id(
     analysis_id: uuid.UUID, db: AsyncSession = Depends(get_db)
 ) -> AnalysisRead:
+    """Loads a previously persisted analysis verbatim — no LLM/agent call,
+    just a read of `result` as it was saved when the query first ran."""
     analysis = await get_analysis(db, analysis_id)
     return AnalysisRead.model_validate(analysis)
+
+
+@router.delete("/analyses/{analysis_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_analysis_by_id(
+    analysis_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+) -> None:
+    await delete_analysis(db, analysis_id)
+    await db.commit()

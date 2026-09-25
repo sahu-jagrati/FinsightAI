@@ -15,7 +15,7 @@ over millions of rows fast.
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document_chunk import DocumentChunk
@@ -49,10 +49,28 @@ def apply_filters(stmt, filters: RetrievalFilters | None):
         stmt = stmt.where(DocumentChunk.document_id == filters.document_id)
     if filters.document_type is not None:
         stmt = stmt.where(DocumentChunk.document_type == filters.document_type)
+    # `year` is denormalized from the *document's* `reporting_period` at
+    # ingestion time (one value for the whole document — see
+    # `metadata_extractor.extract_year` / `indexing_service.index_document`)
+    # — it's often unset entirely (an upload with no reporting_period
+    # given), and even when set it doesn't mean "this chunk only discusses
+    # that year": a 10-K's financial-statement/segment tables routinely
+    # report 2-3 fiscal years' figures side by side in the SAME chunk (e.g.
+    # "Total net sales $416,161 ... $391,035 ..." is one chunk covering
+    # both FY2025 and FY2024). Treating a query's requested year(s) as a
+    # hard `WHERE year = ...` exclusion previously threw away exactly the
+    # right evidence for any document missing/mismatching that one coarse
+    # value — reproduced live against a real uploaded Apple 10-K PDF with
+    # no reporting_period set (year IS NULL on every one of its chunks):
+    # `year IN (2024, 2025)` matched zero rows, while the unfiltered
+    # search's #1 result (dense score 0.80) was the exact "Total net
+    # sales" chunk containing both requested years. So `year`, when
+    # present, is used only to prefer/narrow among chunks that HAVE it —
+    # it never excludes a chunk that doesn't carry that metadata.
     if filters.year is not None:
-        stmt = stmt.where(DocumentChunk.year == filters.year)
+        stmt = stmt.where(or_(DocumentChunk.year.is_(None), DocumentChunk.year == filters.year))
     if filters.years:
-        stmt = stmt.where(DocumentChunk.year.in_(filters.years))
+        stmt = stmt.where(or_(DocumentChunk.year.is_(None), DocumentChunk.year.in_(filters.years)))
     return stmt
 
 

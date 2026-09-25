@@ -41,8 +41,20 @@ class Analysis(UUIDPrimaryKeyMixin, Base):
         GUID(), ForeignKey("users.id", ondelete="SET NULL"), index=True
     )
     query: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(String(200))
+    """Short label for the Recent Research list — derived from `query` at
+    persist time (Section: Research History), never re-derived at read
+    time so it stays stable even if the title-generation heuristic later
+    changes."""
+    # values_callable: bind/read the member *value* ("pending"), matching
+    # what the Alembic migration actually put in the Postgres enum type —
+    # see the identical comment on Document.document_type.
     status: Mapped[AnalysisStatus] = mapped_column(
-        SAEnum(AnalysisStatus, name="analysis_status"), default=AnalysisStatus.PENDING, index=True
+        SAEnum(
+            AnalysisStatus, name="analysis_status", values_callable=lambda e: [m.value for m in e]
+        ),
+        default=AnalysisStatus.PENDING,
+        index=True,
     )
     result: Mapped[dict | None] = mapped_column(_JSONType)
     """The final ReportResult, serialized (executive summary, findings,
@@ -67,7 +79,12 @@ class AgentRun(UUIDPrimaryKeyMixin, Base):
     )
     agent_name: Mapped[str] = mapped_column(String(64), index=True)
     status: Mapped[AgentRunStatus] = mapped_column(
-        SAEnum(AgentRunStatus, name="agent_run_status"), default=AgentRunStatus.WAITING
+        SAEnum(
+            AgentRunStatus,
+            name="agent_run_status",
+            values_callable=lambda e: [m.value for m in e],
+        ),
+        default=AgentRunStatus.WAITING,
     )
     step_order: Mapped[int] = mapped_column(Integer, default=0)
     input: Mapped[dict | None] = mapped_column(_JSONType)

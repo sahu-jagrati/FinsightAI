@@ -59,6 +59,17 @@ class ExtractedMetric:
     document_id: uuid.UUID | None = None
     chunk_id: uuid.UUID | None = None
     company_id: uuid.UUID | None = None
+    label: str | None = None
+    """The exact table-row label the value was read from ("Diluted
+    earnings per share"), when it came from a table row."""
+    extraction_path: str = "prose"
+    """"table_row" (label + aligned value cells in a financial table) or
+    "prose" (a value stated in a sentence)."""
+    year_validated: bool = True
+    """True only when `year` is backed by the source text itself — a table
+    header whose column count matched the row, or a year sitting right next
+    to the value. False when `year` is merely the query's year (a guess)
+    or unknown; unvalidated years never feed a calculation."""
 
 
 @dataclass
@@ -67,6 +78,12 @@ class ComparisonRow:
     metric: str
     values_by_year: dict[int, float]
     calculation: CalculationResult | None = None
+    unit: str = "usd"
+    """Unit exactly as reported ("usd_millions", "usd_per_share", "percent",
+    ...) — every value in `values_by_year` shares it."""
+    insufficient_reason: str | None = None
+    """Set (with `calculation=None`) when a calculation was needed but the
+    required years weren't all reliably available."""
 
 
 @dataclass

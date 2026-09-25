@@ -9,6 +9,7 @@ the candidate pool before fusing — they come from different scales
 dominate regardless of `alpha`.
 """
 
+import re
 import uuid
 
 from sqlalchemy import func, select
@@ -24,6 +25,51 @@ from app.rag.retrieval.vector_store import RetrievalFilters, ScoredChunk, apply_
 _CANDIDATE_POOL_MULTIPLIER = 4
 
 
+# Words that carry the *task* rather than the topic. In "What were Apple's
+# total liabilities ... Calculate the percentage change and explain the
+# reasons" nothing in a balance sheet contains "calculate", "percentage",
+# "explain" or "reasons" — they'd only add noise to a keyword match.
+_QUERY_TASK_WORDS = frozenset(
+    "calculate calculated calculation percentage percent change changes explain reason reasons "
+    "based only uploaded annual report fiscal year years what which compare comparison show tell "
+    "give much many using according provide summarize summary main major "
+    "a an the of to in on at by for with from as is are was were be been it its this that these "
+    "those and or but not do does did has have had than then there their they you your".split()
+)
+_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
+
+
+def query_topic_terms(query_text: str) -> list[str]:
+    """The query's topical words (lowercased, de-duplicated, task words
+    like "calculate"/"explain" removed) — shared by sparse search and the
+    reranker's focused-excerpt selection so both agree on what the query is
+    about."""
+    seen: list[str] = []
+    for token in _TOKEN_RE.findall(query_text.lower()):
+        if len(token) < 2 or token in _QUERY_TASK_WORDS or token in seen:
+            continue
+        seen.append(token)
+    return seen
+
+
+def build_sparse_tsquery_text(query_text: str) -> str | None:
+    """`term1 | term2 | ...` over the query's topical words, or None when
+    nothing is left.
+
+    `plainto_tsquery` ANDs every word, so a natural-language question
+    ("What were Apple's total liabilities in fiscal year 2025 ... Calculate
+    the percentage change ...") requires ONE chunk to contain all of them —
+    which no real page does — and sparse search returned nothing at all,
+    silently reducing "hybrid" retrieval to dense-only. That is what kept a
+    10-K's balance sheet (a dense table, poorly served by embeddings) from
+    ever being retrieved for a plain "total liabilities" question. An OR
+    query lets `ts_rank_cd` do what it is for: rank chunks by how many, and
+    how close together, the query's terms appear. Only `[A-Za-z0-9]` tokens
+    are ever emitted, so the string is safe to hand to `to_tsquery`."""
+    terms = query_topic_terms(query_text)
+    return " | ".join(terms) if terms else None
+
+
 async def sparse_search(
     db: AsyncSession,
     query_text: str,
@@ -31,7 +77,10 @@ async def sparse_search(
     top_k: int,
     filters: RetrievalFilters | None = None,
 ) -> list[ScoredChunk]:
-    tsquery = func.plainto_tsquery("english", query_text)
+    tsquery_text = build_sparse_tsquery_text(query_text)
+    if tsquery_text is None:
+        return []
+    tsquery = func.to_tsquery("english", tsquery_text)
     tsvector = func.to_tsvector("english", DocumentChunk.content)
     rank = func.ts_rank_cd(tsvector, tsquery)
 

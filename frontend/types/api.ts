@@ -52,6 +52,8 @@ export interface CalculationResult {
   operation: string;
   result: number;
   formula: string;
+  /** Includes begin_year / end_year / unit for calculations produced by the
+   * Calculation Agent (the period and unit the result covers). */
   inputs: Record<string, unknown>;
 }
 
@@ -60,6 +62,12 @@ export interface ComparisonRow {
   metric: string;
   values_by_year: Record<string, number>;
   calculation: CalculationResult | null;
+  /** Unit exactly as reported: usd, usd_millions, usd_thousands,
+   * usd_billions, usd_per_share, percent. Shared by every value in the row. */
+  unit?: string;
+  /** Set (with calculation=null) when a required year wasn't reliably
+   * available — the UI shows "Insufficient data", never a guessed number. */
+  insufficient_reason?: string | null;
 }
 
 export interface Citation {
@@ -100,6 +108,7 @@ export interface AgentRun {
 export interface Analysis {
   id: string;
   query: string;
+  title: string;
   status: AnalysisStatus;
   result: ReportResult | null;
   error: string | null;
@@ -108,8 +117,22 @@ export interface Analysis {
   agent_runs: AgentRun[];
 }
 
+// Lightweight shape returned by GET /api/analyses (Recent Research list) —
+// omits the full `result`/`agent_runs` payload; open the analysis via
+// getAnalysis(id) to get the full Analysis for display.
+export interface AnalysisSummary {
+  id: string;
+  query: string;
+  title: string;
+  status: AnalysisStatus;
+  created_at: string;
+  execution_time_ms: number | null;
+  confidence: number | null;
+  insufficient_evidence: boolean | null;
+}
+
 export interface AnalysisListResponse {
-  items: Analysis[];
+  items: AnalysisSummary[];
   total: number;
   limit: number;
   offset: number;
